@@ -1,36 +1,41 @@
-import requests
-from bs4 import BeautifulSoup
-import csv
-import time
-from datetime import datetime
+import psycopg2
 
-headers = {
-    "User-Agent": "Mozilla/5.0"
-}
+# Подключение к Supabase PostgreSQL
+conn = psycopg2.connect(
+    host="aws-0-eu-central-1.pooler.supabase.com",
+    port=6543,
+    database="postgres",
+    user="postgres.iskfuiszpxwrdptbufqc",
+    password="Thisissparta302@"  #исправить!
+)
 
-filename = f"shoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+cursor = conn.cursor()
 
-with open(filename, mode="w", newline='', encoding='utf-8') as file:
-    writer = csv.writer(file)
-    writer.writerow(["Название", "Цена", "Ссылка"])
+# Создаём таблицу, если ещё нет
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS shoes (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    price TEXT,
+    url TEXT,
+    created_at TIMESTAMP DEFAULT now()
+)
+""")
 
-    for page in range(1, 4):
-        url = f"https://kaspi.kz/shop/c/shoes/?page={page}"
-        print(f"Парсим: {url}")
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.select('.item-card__info')
+# Пример данных — замени на свои из парсера
+shoes_data = [
+    {"name": "Nike Air Max", "price": "49 990 ₸", "url": "https://kaspi.kz/shop/p/nike-1"},
+    {"name": "Adidas Ultraboost", "price": "64 000 ₸", "url": "https://kaspi.kz/shop/p/adidas-2"}
+]
 
-        for item in items:
-            name_tag = item.select_one('.item-card__name-link')
-            price_tag = item.select_one('.item-card__prices')
+# Вставляем каждую пару
+for shoe in shoes_data:
+    cursor.execute("""
+        INSERT INTO shoes (name, price, url)
+        VALUES (%s, %s, %s)
+    """, (shoe["name"], shoe["price"], shoe["url"]))
 
-            name = name_tag.text.strip() if name_tag else "Нет названия"
-            link = "https://kaspi.kz" + name_tag['href'] if name_tag else "Нет ссылки"
-            price = price_tag.text.strip() if price_tag else "Нет цены"
-
-            writer.writerow([name, price, link])
-            print(f"{name} — {price}\n{link}\n")
-
-print(f"\n✅ Парсинг завершён. Данные сохранены в {filename}")
-time.sleep(300)  # держим worker живым 5 минут
+# Сохраняем и закрываем
+conn.commit()
+cursor.close()
+conn.close()
