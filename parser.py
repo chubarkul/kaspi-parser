@@ -1,26 +1,21 @@
 import os
-import time
 import datetime
-import requests
 import psycopg2
+import requests
+import time
+import random
 from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
-# Переменные окружения из Render
+# Настройки базы из environment (Render)
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-# Настройки
 KASPI_URL = "https://kaspi.kz/shop/c/shoes/?page=1"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/115.0.0.0 Safari/537.36",
-    "Accept-Language": "ru-RU,ru;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Connection": "keep-alive"
-}
 
 print(f"🔥 Парсер запустился: {datetime.datetime.now()}")
 
@@ -57,40 +52,36 @@ except Exception as e:
     conn.close()
     exit(1)
 
-# Получение страницы с Kaspi с защитой от 429
-retries = 5
-wait_time = 30  # секунд
+# Функция с повторной попыткой при 429
+@retry(
+    retry=retry_if_exception_type(Exception),
+    wait=wait_exponential(multiplier=1, min=10, max=60),
+    stop=stop_after_attempt(5)
+)
+def get_page():
+    ua = UserAgent()
+    headers = {"User-Agent": ua.random}
+    response = requests.get(KASPI_URL, headers=headers)
+    if response.status_code == 429:
+        raise Exception("429 Too Many Requests")
+    response.raise_for_status()
+    return response.text
 
-for attempt in range(retries):
-    try:
-        response = requests.get(KASPI_URL, headers=HEADERS)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            print("✅ Страница Kaspi получена")
-            break
-        elif response.status_code == 429:
-            print(f"⏳ Попытка {attempt + 1}: 429 Too Many Requests. Ждём {wait_time} сек...")
-            time.sleep(wait_time)
-        else:
-            print(f"⚠️ Неожиданный статус {response.status_code}")
-            break
-    except Exception as e:
-        print("❌ Ошибка при получении данных с Kaspi:", e)
-        time.sleep(wait_time)
-else:
-    print("❌ Не удалось получить страницу после нескольких попыток")
+# Получение страницы
+try:
+    html = get_page()
+    soup = BeautifulSoup(html, "html.parser")
+    print("✅ Страница Kaspi получена")
+except Exception as e:
+    print("❌ Не удалось получить страницу Kaspi:", e)
     conn.close()
     exit(1)
 
-# Поиск карточек товара
+# Извлечение карточек
 products = soup.select("div.item-card__info")
-if not products:
-    print("⚠️ Не найдено карточек товаров")
-else:
-    print(f"🔍 Найдено товаров: {len(products)}")
+print(f"🔍 Найдено товаров: {len(products)}")
 
 inserted = 0
-
 for p in products:
     try:
         name = p.select_one(".item-card__name").get_text(strip=True)
@@ -104,11 +95,12 @@ for p in products:
         """, (name, price, url))
         inserted += 1
 
+        time.sleep(random.uniform(0.2, 0.7))  # немного притормозим на всякий
+
     except Exception as e:
         print("⚠️ Ошибка при обработке карточки:", e)
         continue
 
-# Завершение
 conn.commit()
 cursor.close()
 conn.close()
