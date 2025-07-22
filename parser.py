@@ -5,17 +5,21 @@ import requests
 import psycopg2
 from bs4 import BeautifulSoup
 
-# Конфигурация из переменных окружения Render
+# Переменные окружения из Render
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-# Константы
+# Настройки
 KASPI_URL = "https://kaspi.kz/shop/c/shoes/?page=1"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/115.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/115.0.0.0 Safari/537.36",
+    "Accept-Language": "ru-RU,ru;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Connection": "keep-alive"
 }
 
 print(f"🔥 Парсер запустился: {datetime.datetime.now()}")
@@ -53,19 +57,28 @@ except Exception as e:
     conn.close()
     exit(1)
 
-# Запрос к Kaspi
-try:
-    response = requests.get(KASPI_URL, headers=HEADERS)
-    if response.status_code == 429:
-        print("⚠️  Ошибка 429: Слишком много запросов. Пробуем подождать...")
-        time.sleep(10)
-        response = requests.get(KASPI_URL, headers=HEADERS)
+# Получение страницы с Kaspi с защитой от 429
+retries = 5
+wait_time = 30  # секунд
 
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    print("✅ Страница Kaspi получена")
-except Exception as e:
-    print("❌ Ошибка при получении данных с Kaspi:", e)
+for attempt in range(retries):
+    try:
+        response = requests.get(KASPI_URL, headers=HEADERS)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            print("✅ Страница Kaspi получена")
+            break
+        elif response.status_code == 429:
+            print(f"⏳ Попытка {attempt + 1}: 429 Too Many Requests. Ждём {wait_time} сек...")
+            time.sleep(wait_time)
+        else:
+            print(f"⚠️ Неожиданный статус {response.status_code}")
+            break
+    except Exception as e:
+        print("❌ Ошибка при получении данных с Kaspi:", e)
+        time.sleep(wait_time)
+else:
+    print("❌ Не удалось получить страницу после нескольких попыток")
     conn.close()
     exit(1)
 
