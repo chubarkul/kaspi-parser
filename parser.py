@@ -5,18 +5,20 @@ from bs4 import BeautifulSoup
 import psycopg2
 import datetime
 
+print("🔥 Парсер запустился:", datetime.datetime.now())
+
 # Загружаем переменные из .env
 load_dotenv()
 
 # Подключение к базе
-conn = psycopg2.connect(
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT"),
-    database=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD")
-)
-
+try:
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD")
+    )
     cursor = conn.cursor()
 except Exception as e:
     print("❌ Ошибка подключения к базе:", e)
@@ -25,13 +27,13 @@ except Exception as e:
 # Создаём таблицу, если ещё нет
 try:
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS shoes (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        price TEXT,
-        url TEXT UNIQUE,
-        created_at TIMESTAMP DEFAULT now()
-    )
+        CREATE TABLE IF NOT EXISTS shoes (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            price TEXT,
+            url TEXT UNIQUE,
+            created_at TIMESTAMP DEFAULT now()
+        )
     """)
     conn.commit()
 except Exception as e:
