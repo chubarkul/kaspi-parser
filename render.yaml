@@ -1,0 +1,7 @@
+services:
+  - type: worker
+    name: kaspi-parser
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python parser.py
+    plan: free
