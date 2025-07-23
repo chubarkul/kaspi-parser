@@ -75,7 +75,20 @@ async def prepare_context(playwright):
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-        window.chrome = { runtime: {} };
+        Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4 });
+        Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+        window.chrome = {
+            runtime: {},
+            app: {},
+            loadTimes: () => {},
+            csi: () => {},
+        };
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications'
+                ? Promise.resolve({ state: Notification.permission })
+                : originalQuery(parameters)
+        );
     """)
 
     return browser, context
@@ -84,7 +97,6 @@ async def get_products_from_page(page, page_num):
     url = f"{CATEGORY_URL}?page={page_num}&c=750000000"
     print(f"🌐 Открываем: {url}")
 
-    # Логирование консоли и сетевых запросов
     page.on("console", lambda msg: print(f"🪵 [console.{msg.type}] {msg.text}"))
     page.on("request", lambda request: print(f"➡️ Request: {request.method} {request.url}"))
     page.on("response", lambda response: print(f"⬅️ Response {response.status}: {response.url}"))
