@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: kaspi-scraper
+    name: kaspi-yandexbot
     runtime: python
     buildCommand: |
       pip install -r requirements.txt
       playwright install
-    startCommand: python kaspi_scraper_with_cookies.py
+    startCommand: python kaspi_bot_scraper.py
     envVars:
       - key: DATABASE_URL
         sync: false
