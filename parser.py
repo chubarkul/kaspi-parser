@@ -44,14 +44,21 @@ async def get_product_list_from_page(page, page_num):
     url = f"{CATEGORY_URL}?page={page_num}"
     print(f"🌐 Открываем: {url}")
     await page.goto(url, timeout=60000)
-    await page.wait_for_timeout(2000)  # Подстраховка, можно убрать
 
-    try:
-        kaspi_data = await page.evaluate("window.__KASPIPAGE__")
-        return kaspi_data['data']['catalogModel']['productList']
-    except Exception as e:
-        print(f"⚠️ Ошибка получения данных с {url}: {e}")
-        return []
+    # Ждём появления переменной window.__KASPIPAGE__
+    for _ in range(20):  # максимум 20 попыток (до 10 секунд)
+        result = await page.evaluate("window.__KASPIPAGE__ || null")
+        if result:
+            try:
+                return result['data']['catalogModel']['productList']
+            except Exception as e:
+                print(f"⚠️ Ошибка чтения productList: {e}")
+                return []
+        await page.wait_for_timeout(500)  # ждём полсекунды
+
+    print("⚠️ Не дождались __KASPIPAGE__")
+    return []
+
 
 
 def save_to_db(conn, products):
