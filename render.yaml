@@ -1,9 +1,11 @@
 services:
-  - type: worker
-    name: kaspi-parser
-    env: python
+  - type: web
+    name: kaspi-scraper
+    runtime: python
     buildCommand: |
       pip install -r requirements.txt
-      python -m playwright install chromium
-    startCommand: python parser.py
-    plan: pro
+      playwright install
+    startCommand: python kaspi_scraper_with_cookies.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
