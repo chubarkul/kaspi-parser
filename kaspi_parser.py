@@ -7,7 +7,11 @@ import psycopg2
 
 CATEGORY_URL = "https://kaspi.kz/shop/c/shoes/"
 MAX_PAGES = 1
-COOKIES_JSON = os.getenv("KASPI_COOKIES_JSON")  # Строка, не файл!
+COOKIES_JSON = os.getenv("KASPI_COOKIES_JSON")
+
+PROXY_SERVER = os.getenv("PROXY_SERVER") or "http://91.147.127.75:50100"
+PROXY_USERNAME = os.getenv("PROXY_USERNAME") or "bamblbeeprime"
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD") or "LYBC5iNA3m"
 
 
 def get_db_connection():
@@ -45,7 +49,14 @@ def save_to_db(conn, products):
 
 
 async def prepare_context(playwright):
-    browser = await playwright.chromium.launch(headless=True)
+    browser = await playwright.chromium.launch(
+        headless=True,
+        proxy={
+            "server": PROXY_SERVER,
+            "username": PROXY_USERNAME,
+            "password": PROXY_PASSWORD
+        }
+    )
     context = await browser.new_context(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -64,7 +75,6 @@ async def prepare_context(playwright):
         except Exception as e:
             print(f"⚠️ Ошибка загрузки cookies: {e}")
 
-    # Anti-bot JS подмена
     await context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
@@ -79,7 +89,6 @@ async def get_products_from_page(page, page_num):
     print(f"🌐 Открываем: {url}")
     await page.goto(url, timeout=60000)
 
-    # Проверим, появился ли попап
     popup = await page.query_selector(".city-selector__popup")
     if popup:
         print("📍 Попап с городом найден — пытаемся нажать")
@@ -131,7 +140,7 @@ async def main():
                 break
             save_to_db(conn, products)
 
-        await page.wait_for_timeout(5000)  # даем подышать странице
+        await page.wait_for_timeout(5000)
         await browser.close()
         conn.close()
         print(f"🏁 Готово: {datetime.now()}")
