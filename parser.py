@@ -56,9 +56,9 @@ def create_table(conn):
 def extract_products_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
 
-    # DEBUG: вывод первых 3000 символов
-    print("=== Часть HTML страницы (первые 3000 символов) ===")
-    print(html[:3000])
+    # DEBUG: вывод HTML документа
+    print("=== HTML Document ===")
+    print(html)
     print("=== Конец вывода ===")
 
     script_tag = soup.find("script", string=re.compile("productListData"))
