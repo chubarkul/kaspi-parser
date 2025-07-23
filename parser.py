@@ -1,12 +1,33 @@
 import asyncio
 import os
 import psycopg2
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from datetime import datetime
 from playwright.async_api import async_playwright
 from psycopg2 import sql
 
-DB_URL = os.getenv("DATABASE_URL")
+
+def get_db_connection():
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise Exception("❌ DATABASE_URL не задана в переменных окружения")
+
+    # Добавим sslmode=require, если его нет
+    if "sslmode" not in db_url:
+        if "?" in db_url:
+            db_url += "&sslmode=require"
+        else:
+            db_url += "?sslmode=require"
+
+    try:
+        conn = psycopg2.connect(db_url)
+        print("✅ Подключение к базе установлено")
+        return conn
+    except Exception as e:
+        print(f"❌ Ошибка подключения к базе: {e}")
+        return None
+
 
 async def get_page_html(url: str) -> str:
     try:
@@ -23,14 +44,6 @@ async def get_page_html(url: str) -> str:
         print(f"❌ Ошибка при получении страницы через Playwright: {e}")
         return ""
 
-def connect_to_db():
-    try:
-        conn = psycopg2.connect(DB_URL)
-        print("✅ Подключение к базе установлено")
-        return conn
-    except Exception as e:
-        print(f"❌ Ошибка подключения к базе: {e}")
-        return None
 
 def create_table(conn):
     with conn.cursor() as cur:
@@ -44,6 +57,7 @@ def create_table(conn):
         """)
         conn.commit()
     print("✅ Таблица проверена/создана")
+
 
 def parse_products(html):
     soup = BeautifulSoup(html, "html.parser")
@@ -65,6 +79,7 @@ def parse_products(html):
             products.append((title, url))
     return products
 
+
 def save_to_db(conn, products):
     with conn.cursor() as cur:
         for title, url in products:
@@ -76,9 +91,10 @@ def save_to_db(conn, products):
     print(f"✅ Парсер завершён. Добавлено новых товаров: {len(products)}")
     print(f"🕒 Время завершения: {datetime.now()}")
 
+
 async def main():
     print(f"🔥 Парсер запустился: {datetime.now()}")
-    conn = connect_to_db()
+    conn = get_db_connection()
     if not conn:
         return
 
@@ -87,6 +103,7 @@ async def main():
     url = "https://kaspi.kz/shop/c/shoes/?page=1"
     html = await get_page_html(url)
     if not html:
+        conn.close()
         return
 
     products = parse_products(html)
@@ -96,6 +113,7 @@ async def main():
         print("⚠️ Завершено без добавления товаров")
 
     conn.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
