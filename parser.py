@@ -47,7 +47,7 @@ async def get_product_list_from_page(page, page_num):
     # Печать начала HTML-документа
     html = await page.content()
     print(f"\n=== HTML-фрагмент страницы {page_num} ===\n")
-    print(html[:1000])
+    print(html)
     print(f"\n=== Конец HTML-фрагмента ===\n")
 
     # Ждём window.__KASPIPAGE__
