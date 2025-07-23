@@ -44,13 +44,13 @@ async def get_product_list_from_page(page, page_num):
     print(f"🌐 Открываем: {url}")
     await page.goto(url, timeout=60000)
 
-    # Печать первых 1000 символов HTML
+    # Печать начала HTML-документа
     html = await page.content()
     print(f"\n=== HTML-фрагмент страницы {page_num} ===\n")
     print(html[:1000])
-    print(f"\n=== Конец HTML-фрагмента страницы {page_num} ===\n")
+    print(f"\n=== Конец HTML-фрагмента ===\n")
 
-    # Ждём появления переменной window.__KASPIPAGE__
+    # Ждём window.__KASPIPAGE__
     for _ in range(20):
         result = await page.evaluate("window.__KASPIPAGE__ || null")
         if result:
@@ -97,13 +97,21 @@ async def main():
                 "Chrome/115.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 800},
+            device_scale_factor=1,
+            is_mobile=False,
+            has_touch=False,
             locale="ru-RU"
         )
 
-        await context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
+        # Максимальная маскировка: navigator.*
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['ru-RU', 'ru']});
+        """)
 
+        # Блокировка лишних ресурсов
         await context.route("**/*", lambda route, request: (
             route.abort()
             if request.resource_type in ["image", "media", "font"]
