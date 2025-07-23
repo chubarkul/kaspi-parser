@@ -1,11 +1,13 @@
 import asyncio
 import os
-import psycopg2
+import json
 from datetime import datetime
 from playwright.async_api import async_playwright
+import psycopg2
 
 CATEGORY_URL = "https://kaspi.kz/shop/c/shoes/"
 MAX_PAGES = 1
+COOKIES_JSON = os.getenv("KASPI_COOKIES_JSON")  # Строка, не файл!
 
 
 def get_db_connection():
@@ -13,7 +15,7 @@ def get_db_connection():
     if not db_url:
         raise Exception("❌ DATABASE_URL не задана")
     if "sslmode" not in db_url:
-        db_url += "&sslmode=require" if "?" in db_url else "?sslmode=require"
+        db_url += ("&sslmode=require" if "?" in db_url else "?sslmode=require")
     return psycopg2.connect(db_url)
 
 
@@ -32,44 +34,84 @@ def create_table(conn):
 
 def save_to_db(conn, products):
     with conn.cursor() as cur:
-        for product in products:
+        for p in products:
             cur.execute("""
                 INSERT INTO kaspi_products (title, url)
                 VALUES (%s, %s)
                 ON CONFLICT (url) DO NOTHING
-            """, (product["title"], product["url"]))
+            """, (p["title"], p["url"]))
         conn.commit()
     print(f"✅ Сохранено в БД: {len(products)}")
 
 
-async def get_product_list_from_page(page, page_num):
-    url = f"{CATEGORY_URL}?page={page_num}"
+async def prepare_context(playwright):
+    browser = await playwright.chromium.launch(headless=True)
+    context = await browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+        ),
+        locale="ru-RU",
+        timezone_id="Asia/Almaty",
+        viewport={"width": 1280, "height": 800},
+    )
+
+    if COOKIES_JSON:
+        try:
+            cookies = json.loads(COOKIES_JSON)
+            await context.add_cookies(cookies)
+            print("🍪 Куки загружены в контекст")
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки cookies: {e}")
+
+    # Anti-bot JS подмена
+    await context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    """)
+
+    return browser, context
+
+
+async def get_products_from_page(page, page_num):
+    url = f"{CATEGORY_URL}?page={page_num}&c=750000000"
     print(f"🌐 Открываем: {url}")
     await page.goto(url, timeout=60000)
 
-    try:
-        await page.wait_for_selector('text=Алматы', timeout=5000)
-        await page.click('text=Алматы')
-        print("📍 Город выбран: Алматы")
-        await page.wait_for_timeout(2000)
-    except:
+    # Проверим, появился ли попап
+    popup = await page.query_selector(".city-selector__popup")
+    if popup:
+        print("📍 Попап с городом найден — пытаемся нажать")
+        try:
+            almaty_btn = await page.query_selector("text=Алматы")
+            if almaty_btn:
+                await almaty_btn.click()
+                await page.wait_for_timeout(1000)
+                print("✅ Город выбран: Алматы")
+        except:
+            print("⚠️ Не удалось выбрать город")
+    else:
         print("ℹ️ Попап с городом не появился")
+
+    await page.wait_for_timeout(3000)
 
     items = await page.query_selector_all(".item-card__name")
     print(f"🔍 Найдено карточек: {len(items)}")
 
     products = []
-    for item in items:
-        link = await item.query_selector("a")
-        if not link:
+    for i, item in enumerate(items):
+        try:
+            link = await item.query_selector("a")
+            title = await link.inner_text()
+            href = await link.get_attribute("href")
+            if href:
+                full_url = "https://kaspi.kz" + href
+                products.append({"title": title.strip(), "url": full_url})
+                print(f"{i+1}. 🔗 {title.strip()} → {full_url}")
+        except:
             continue
-        title = await link.inner_text()
-        href = await link.get_attribute("href")
-        if href:
-            products.append({
-                "title": title.strip(),
-                "url": "https://kaspi.kz" + href
-            })
+
     return products
 
 
@@ -79,27 +121,21 @@ async def main():
     create_table(conn)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-            locale="ru-RU",
-            extra_http_headers={"accept-language": "ru-RU,ru;q=0.9"}
-        )
+        browser, context = await prepare_context(p)
         page = await context.new_page()
 
-        all_products = []
         for page_num in range(1, MAX_PAGES + 1):
-            products = await get_product_list_from_page(page, page_num)
+            products = await get_products_from_page(page, page_num)
             if not products:
-                print(f"🛑 Страница {page_num} пуста")
+                print("🛑 Страница 1 пуста")
                 break
-            all_products.extend(products)
+            save_to_db(conn, products)
 
-        save_to_db(conn, all_products)
+        print("⏸ Браузер открыт. Нажми Enter чтобы завершить...")
+        input()
         await browser.close()
-    conn.close()
-    print(f"🏁 Готово: {datetime.now()}")
+        conn.close()
+        print(f"🏁 Готово: {datetime.now()}")
 
 
 if __name__ == "__main__":
