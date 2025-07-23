@@ -83,6 +83,12 @@ async def prepare_context(playwright):
 async def get_products_from_page(page, page_num):
     url = f"{CATEGORY_URL}?page={page_num}&c=750000000"
     print(f"🌐 Открываем: {url}")
+
+    # Логирование консоли и сетевых запросов
+    page.on("console", lambda msg: print(f"🪵 [console.{msg.type}] {msg.text}"))
+    page.on("request", lambda request: print(f"➡️ Request: {request.method} {request.url}"))
+    page.on("response", lambda response: print(f"⬅️ Response {response.status}: {response.url}"))
+
     await page.goto("https://api.ipify.org?format=json")
     ip_info = await page.inner_text("body")
     print(f"🕵️ IP в Render через прокси: {ip_info}")
