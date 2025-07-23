@@ -59,17 +59,10 @@ async def fetch_html_with_playwright(url: str) -> str:
 
 
 def extract_products_from_html(html: str):
-    soup = BeautifulSoup(html, "html.parser")
-    script_tag = soup.find("script", text=re.compile("productListData"))
-
-    if not script_tag:
-        print("⚠️ Не найден скрипт с productListData")
-        return []
-
     try:
-        json_text = re.search(r'window\.productListData\s*=\s*(\{.*?\});', script_tag.string, re.DOTALL)
+        json_text = re.search(r'window\.productListData\s*=\s*(\{.*?\});', html, re.DOTALL)
         if not json_text:
-            print("⚠️ Не удалось извлечь JSON из скрипта")
+            print("⚠️ Не удалось извлечь JSON из HTML напрямую")
             return []
 
         data = json.loads(json_text.group(1))
@@ -84,6 +77,7 @@ def extract_products_from_html(html: str):
     except Exception as e:
         print(f"❌ Ошибка при парсинге JSON: {e}")
         return []
+
 
 
 def save_to_db(conn, products):
