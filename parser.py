@@ -1,24 +1,17 @@
 import asyncio
 import os
 import psycopg2
-from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from datetime import datetime
 from playwright.async_api import async_playwright
-from psycopg2 import sql
-
 
 def get_db_connection():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise Exception("❌ DATABASE_URL не задана в переменных окружения")
 
-    # Добавим sslmode=require, если его нет
     if "sslmode" not in db_url:
-        if "?" in db_url:
-            db_url += "&sslmode=require"
-        else:
-            db_url += "?sslmode=require"
+        db_url += "&sslmode=require" if "?" in db_url else "?sslmode=require"
 
     try:
         conn = psycopg2.connect(db_url)
@@ -28,22 +21,28 @@ def get_db_connection():
         print(f"❌ Ошибка подключения к базе: {e}")
         return None
 
-
 async def get_page_html(url: str) -> str:
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
-            await page.goto(url)
-            await page.wait_for_selector("div.item-card__info", timeout=15000)
-            content = await page.content()
+            await page.goto(url, timeout=30000)
+
+            # Сохраним страницу и скриншот на случай отладки
+            await page.screenshot(path="/tmp/kaspi_debug.png", full_page=True)
+            html = await page.content()
+            with open("/tmp/kaspi_debug.html", "w", encoding="utf-8") as f:
+                f.write(html)
+
+            await page.wait_for_selector("div.item-card__info", timeout=30000)
             await browser.close()
-            return content
+            return html
     except Exception as e:
         print(f"❌ Ошибка при получении страницы через Playwright: {e}")
         return ""
-
 
 def create_table(conn):
     with conn.cursor() as cur:
@@ -57,7 +56,6 @@ def create_table(conn):
         """)
         conn.commit()
     print("✅ Таблица проверена/создана")
-
 
 def parse_products(html):
     soup = BeautifulSoup(html, "html.parser")
@@ -79,7 +77,6 @@ def parse_products(html):
             products.append((title, url))
     return products
 
-
 def save_to_db(conn, products):
     with conn.cursor() as cur:
         for title, url in products:
@@ -90,7 +87,6 @@ def save_to_db(conn, products):
         conn.commit()
     print(f"✅ Парсер завершён. Добавлено новых товаров: {len(products)}")
     print(f"🕒 Время завершения: {datetime.now()}")
-
 
 async def main():
     print(f"🔥 Парсер запустился: {datetime.now()}")
@@ -113,7 +109,6 @@ async def main():
         print("⚠️ Завершено без добавления товаров")
 
     conn.close()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
