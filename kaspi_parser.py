@@ -131,8 +131,7 @@ async def main():
                 break
             save_to_db(conn, products)
 
-        print("⏸ Браузер открыт. Нажми Enter чтобы завершить...")
-        input()
+        await page.wait_for_timeout(5000)  # даем подышать странице
         await browser.close()
         conn.close()
         print(f"🏁 Готово: {datetime.now()}")
