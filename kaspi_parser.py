@@ -13,7 +13,6 @@ PROXY_SERVER = os.getenv("PROXY_SERVER") or "http://91.147.127.75:50100"
 PROXY_USERNAME = os.getenv("PROXY_USERNAME") or "bamblbeeprime"
 PROXY_PASSWORD = os.getenv("PROXY_PASSWORD") or "LYBC5iNA3m"
 
-
 def get_db_connection():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
@@ -21,7 +20,6 @@ def get_db_connection():
     if "sslmode" not in db_url:
         db_url += ("&sslmode=require" if "?" in db_url else "?sslmode=require")
     return psycopg2.connect(db_url)
-
 
 def create_table(conn):
     with conn.cursor() as cur:
@@ -35,7 +33,6 @@ def create_table(conn):
         """)
         conn.commit()
 
-
 def save_to_db(conn, products):
     with conn.cursor() as cur:
         for p in products:
@@ -46,7 +43,6 @@ def save_to_db(conn, products):
             """, (p["title"], p["url"]))
         conn.commit()
     print(f"✅ Сохранено в БД: {len(products)}")
-
 
 async def prepare_context(playwright):
     browser = await playwright.chromium.launch(
@@ -79,14 +75,18 @@ async def prepare_context(playwright):
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+        window.chrome = { runtime: {} };
     """)
 
     return browser, context
 
-
 async def get_products_from_page(page, page_num):
     url = f"{CATEGORY_URL}?page={page_num}&c=750000000"
     print(f"🌐 Открываем: {url}")
+    await page.goto("https://api.ipify.org?format=json")
+    ip_info = await page.inner_text("body")
+    print(f"🕵️ IP в Render через прокси: {ip_info}")
+
     await page.goto(url, timeout=60000)
 
     popup = await page.query_selector(".city-selector__popup")
@@ -103,7 +103,13 @@ async def get_products_from_page(page, page_num):
     else:
         print("ℹ️ Попап с городом не появился")
 
+    await page.wait_for_timeout(6000)
+    await page.mouse.wheel(0, 5000)
     await page.wait_for_timeout(3000)
+
+    html = await page.content()
+    if "Технические работы" in html or "Что-то пошло не так" in html:
+        print("❌ Страница — заглушка Kaspi. Вероятна блокировка.")
 
     items = await page.query_selector_all(".item-card__name")
     print(f"🔍 Найдено карточек: {len(items)}")
@@ -122,7 +128,6 @@ async def get_products_from_page(page, page_num):
             continue
 
     return products
-
 
 async def main():
     print(f"🚀 Старт: {datetime.now()}")
@@ -144,7 +149,6 @@ async def main():
         await browser.close()
         conn.close()
         print(f"🏁 Готово: {datetime.now()}")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
