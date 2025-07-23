@@ -2,8 +2,8 @@ services:
   - type: worker
     name: kaspi-parser
     env: python
-    buildCommand: |
-      pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt
+    startCommand: |
       python -m playwright install chromium
-    startCommand: python parser.py
+      python parser.py
     plan: free
