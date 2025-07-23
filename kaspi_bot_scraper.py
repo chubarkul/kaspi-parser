@@ -10,7 +10,7 @@ MAX_PAGES = 5
 def get_db_connection():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
-        raise Exception("❌ DATABASE_URL не задана в переменных окружения")
+        raise Exception("❌ DATABASE_URL не задана")
     if "sslmode" not in db_url:
         db_url += "&sslmode=require" if "?" in db_url else "?sslmode=require"
     return psycopg2.connect(db_url)
@@ -29,14 +29,11 @@ def create_table(conn):
 
 async def get_product_list_from_page(page, page_num):
     url = f"{CATEGORY_URL}?page={page_num}"
-    print(f"🌐 Открываем: {url}")
+    print(f"🌐 Загружаем: {url}")
     await page.goto(url, timeout=60000)
     html = await page.content()
+    print(f"\n🔍 HTML начало:\n{html}\n")
 
-    # Выводим часть HTML — чтобы понять, что грузится
-    print(f"\n=== HTML начало страницы {page_num} ===\n{html[:1000]}\n=== Конец фрагмента ===")
-
-    # Простой парсинг заголовков через RegExp
     import re
     matches = re.findall(r'<a[^>]+href="(/shop/p/[^"]+)"[^>]*>([^<]+)</a>', html)
     products = []
@@ -54,26 +51,28 @@ def save_to_db(conn, products):
                 ON CONFLICT (url) DO NOTHING
             """, (title, url))
         conn.commit()
-    print(f"💾 Сохранено товаров: {len(products)}")
+    print(f"💾 Сохранено: {len(products)} товаров")
 
 async def main():
-    print(f"🚀 Запуск: {datetime.now()}")
+    print(f"🚀 Старт: {datetime.now()}")
     conn = get_db_connection()
     create_table(conn)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+            user_agent="Mozilla/5.0 (compatible; YaDirectFetcher/1.0; Dyatel; +http://yandex.com/bots)",
             viewport={"width": 1280, "height": 800},
-            locale="ru-RU"
+            locale="ru-RU",
+            is_mobile=False,
+            has_touch=False
         )
         page = await context.new_page()
 
         for page_num in range(1, MAX_PAGES + 1):
             products = await get_product_list_from_page(page, page_num)
             if not products:
-                print(f"🛑 Страница {page_num} пуста")
+                print(f"🛑 Страница {page_num} пуста — выходим")
                 break
             save_to_db(conn, products)
 
