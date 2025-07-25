@@ -55,12 +55,14 @@ async def prepare_context(playwright):
     )
     context = await browser.new_context(
         user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
         ),
         locale="ru-RU",
         timezone_id="Asia/Almaty",
-        viewport={"width": 1280, "height": 800},
+        viewport={"width": 390, "height": 844},
+        is_mobile=True,
+        has_touch=True
     )
 
     if COOKIES_JSON:
